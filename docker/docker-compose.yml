@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 운영 DB
+  postgres:
+    image: postgres:16-alpine
+    container_name: kpost-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kpost
+      POSTGRES_PASSWORD: kpost1234
+      POSTGRES_DB: kpost_automation
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kpost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (실시간 상태 캐싱 / Bull 큐)
+  redis:
+    image: redis:7-alpine
+    container_name: kpost-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:

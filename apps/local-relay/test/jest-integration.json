@@ -1,0 +1,28 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testRegex": "test/(integration|websocket)/.*\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "collectCoverageFrom": ["src/**/*.(t|j)s", "!src/**/*.spec.ts"],
+  "coverageDirectory": "coverage-integration",
+  "coverageThreshold": {
+    "global": {
+      "branches": 80,
+      "functions": 80,
+      "lines": 80,
+      "statements": 80
+    }
+  },
+  "testEnvironment": "node",
+  "testTimeout": 30000,
+  "moduleNameMapper": {
+    "@kpost/common": "<rootDir>/../../packages/common/src",
+    "@kpost/logger": "<rootDir>/../../packages/logger/src",
+    "@kpost/protocol": "<rootDir>/../../packages/protocol/src",
+    "@kpost/database": "<rootDir>/../../packages/database/src",
+    "@kpost/telegram": "<rootDir>/../../packages/telegram/src",
+    "@kpost/test-helpers": "<rootDir>/../../packages/test-helpers/src"
+  }
+}

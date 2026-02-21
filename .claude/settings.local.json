@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npx turbo run build:*)",
+      "Bash(docker --version:*)",
+      "Bash(docker compose:*)",
+      "Bash(node --version:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node -e:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(taskkill:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build)",
+      "Bash(npx vite:*)",
+      "Bash(npx jest:*)",
+      "Bash(npx jest --passWithNoTests)",
+      "Bash(curl:*)",
+      "Bash(find:*)",
+      "Bash(cd:*)",
+      "Bash(npm install:*)",
+      "Bash(dir:*)",
+      "Bash(npx nest build:*)"
+    ]
+  }
+}

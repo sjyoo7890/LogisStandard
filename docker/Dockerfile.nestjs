@@ -1,0 +1,36 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# 루트 패키지 파일 복사
+COPY package.json package-lock.json turbo.json tsconfig.base.json ./
+
+# 워크스페이스 패키지 파일 복사
+COPY packages/ ./packages/
+
+# 빌드 대상 앱 이름을 ARG로 받음
+ARG APP_NAME
+COPY apps/${APP_NAME}/ ./apps/${APP_NAME}/
+
+# 의존성 설치
+RUN npm ci
+
+# 빌드
+RUN npx turbo run build --filter=@kpost/${APP_NAME}
+
+# Production 이미지
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ARG APP_NAME
+ENV NODE_ENV=production
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/${APP_NAME}/dist ./apps/${APP_NAME}/dist
+COPY --from=builder /app/apps/${APP_NAME}/package.json ./apps/${APP_NAME}/package.json
+
+WORKDIR /app/apps/${APP_NAME}
+
+CMD ["node", "dist/main"]

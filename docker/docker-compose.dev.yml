@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 운영 DB
+  postgres:
+    image: postgres:16-alpine
+    container_name: kpost-postgres-dev
+    environment:
+      POSTGRES_USER: kpost
+      POSTGRES_PASSWORD: kpost_dev_1234
+      POSTGRES_DB: kpost_automation_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kpost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL 통계 DB
+  postgres-stats:
+    image: postgres:16-alpine
+    container_name: kpost-postgres-stats-dev
+    environment:
+      POSTGRES_USER: kpost
+      POSTGRES_PASSWORD: kpost_stats_1234
+      POSTGRES_DB: kpost_statistics_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-stats-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kpost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: kpost-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus (모니터링)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: kpost-prometheus-dev
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-dev-data:/prometheus
+
+  # Grafana (대시보드)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: kpost-grafana-dev
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-dev-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres-dev-data:
+  postgres-stats-dev-data:
+  redis-dev-data:
+  prometheus-dev-data:
+  grafana-dev-data:

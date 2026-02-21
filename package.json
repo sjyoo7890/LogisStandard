@@ -1,0 +1,32 @@
+{
+  "name": "kpost-automation-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "우정사업본부 자동화설비 표준 인터페이스 통합플랫폼",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "test:e2e:full": "docker compose -f docker/docker-compose.test.yml up -d --wait && jest --config e2e/jest-e2e.config.ts && docker compose -f docker/docker-compose.test.yml down",
+    "test:coverage": "turbo run test:coverage",
+    "test:ci": "turbo run test && turbo run test:integration && npm run test:e2e:full",
+    "clean": "turbo run clean",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.0.0"
+}

@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'central-relay'
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+
+  - job_name: 'local-relay'
+    static_configs:
+      - targets: ['host.docker.internal:3100']
+
+  - job_name: 'standard-sw'
+    static_configs:
+      - targets: ['host.docker.internal:3200']

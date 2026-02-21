@@ -1,0 +1,681 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["psm_operation", "psm_reginfo"]
+}
+
+// ============================================================================
+// [psm_operation 스키마] 1) 모델 정의 테이블
+// ============================================================================
+
+/// 구분기 Model 정의 Master
+model TbModelMachineMt {
+  machineId         String  @id @map("machine_id") @db.VarChar(6)
+  machineType       String  @map("machine_type") @db.VarChar(1)       // P:소포, C:Conveyor, S:Sorter
+  machineName       String  @map("machine_name") @db.VarChar(14)
+  machineBaseTime   String  @map("machine_base_time") @db.VarChar(4)
+  machineDesc       String? @map("machine_desc") @db.VarChar(100)
+  machineCenterName String? @map("machine_center_name") @db.VarChar(30)
+  sortingMode       String  @default("N") @map("sorting_mode") @db.VarChar(1) // N:일반, C:체결
+  multiYn           String  @default("N") @map("multi_yn") @db.VarChar(1)     // 멀티바코드 사용여부
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  details           TbModelMachineDt[]
+  pcModels          TbModelPcMt[]
+  sortingPlans      TbOperSortingPlanMt[]
+  machineStates     TbOperMachineStateHt[]
+
+  @@map("tb_model_machine_mt")
+  @@schema("psm_operation")
+}
+
+/// 모듈 Group 정의 Master
+model TbModelGroupMt {
+  groupId    String  @id @map("group_id") @db.VarChar(10)
+  groupName  String  @map("group_name") @db.VarChar(50)
+  groupType  String  @map("group_type") @db.VarChar(2)   // 모듈 그룹 유형
+  groupDesc  String? @map("group_desc") @db.VarChar(100)
+  sortOrder  Int     @default(0) @map("sort_order")
+  useYn      String  @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  modules    TbModelModuleMt[]
+
+  @@map("tb_model_group_mt")
+  @@schema("psm_operation")
+}
+
+/// 모듈 정의 Master
+model TbModelModuleMt {
+  moduleId    String  @id @map("module_id") @db.VarChar(10)
+  groupId     String  @map("group_id") @db.VarChar(10)
+  group       TbModelGroupMt @relation(fields: [groupId], references: [groupId])
+  moduleName  String  @map("module_name") @db.VarChar(50)
+  moduleType  String  @map("module_type") @db.VarChar(2)   // 모듈 유형
+  moduleDesc  String? @map("module_desc") @db.VarChar(100)
+  sortOrder   Int     @default(0) @map("sort_order")
+  useYn       String  @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  machineDetails TbModelMachineDt[]
+
+  @@index([groupId])
+  @@map("tb_model_module_mt")
+  @@schema("psm_operation")
+}
+
+/// 구분기 모델 정의 상세
+model TbModelMachineDt {
+  id          String  @id @default(uuid())
+  machineId   String  @map("machine_id") @db.VarChar(6)
+  machine     TbModelMachineMt @relation(fields: [machineId], references: [machineId])
+  moduleId    String  @map("module_id") @db.VarChar(10)
+  module      TbModelModuleMt @relation(fields: [moduleId], references: [moduleId])
+  moduleSeq   Int     @map("module_seq")            // 모듈 시퀀스
+  moduleAddr  String? @map("module_addr") @db.VarChar(20) // 모듈 주소
+  moduleParam String? @map("module_param") @db.VarChar(200) // 모듈 파라미터 (JSON)
+  useYn       String  @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([machineId, moduleId, moduleSeq])
+  @@index([machineId])
+  @@index([moduleId])
+  @@map("tb_model_machine_dt")
+  @@schema("psm_operation")
+}
+
+/// PC 모델 정의
+model TbModelPcMt {
+  pcId        String  @id @map("pc_id") @db.VarChar(10)
+  machineId   String  @map("machine_id") @db.VarChar(6)
+  machine     TbModelMachineMt @relation(fields: [machineId], references: [machineId])
+  pcName      String  @map("pc_name") @db.VarChar(50)
+  pcType      String  @map("pc_type") @db.VarChar(2)       // PC 유형 (MC:Main, SC:Sub, DP:Display 등)
+  ipAddress   String? @map("ip_address") @db.VarChar(15)
+  macAddress  String? @map("mac_address") @db.VarChar(17)
+  pcDesc      String? @map("pc_desc") @db.VarChar(100)
+  useYn       String  @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([machineId])
+  @@map("tb_model_pc_mt")
+  @@schema("psm_operation")
+}
+
+// ============================================================================
+// [psm_operation 스키마] 2) 운영 테이블
+// ============================================================================
+
+/// 장비 각 모듈의 상태 이력
+model TbOperMachineStateHt {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  machine       TbModelMachineMt @relation(fields: [machineId], references: [machineId])
+  moduleId      String   @map("module_id") @db.VarChar(10)
+  stateCode     String   @map("state_code") @db.VarChar(4)    // 상태코드
+  stateName     String?  @map("state_name") @db.VarChar(50)
+  stateValue    String?  @map("state_value") @db.VarChar(200)
+  occurredAt    DateTime @map("occurred_at")
+  clearedAt     DateTime? @map("cleared_at")
+  duration      Int?     @map("duration")                      // 지속시간(초)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, occurredAt])
+  @@index([moduleId, occurredAt])
+  @@map("tb_oper_machine_state_ht")
+  @@schema("psm_operation")
+}
+
+/// 구분계획 정의 Master
+model TbOperSortingPlanMt {
+  planId        String   @id @map("plan_id") @db.VarChar(20)
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  machine       TbModelMachineMt @relation(fields: [machineId], references: [machineId])
+  planName      String   @map("plan_name") @db.VarChar(50)
+  planType      String   @map("plan_type") @db.VarChar(2)      // 계획유형
+  planDate      String   @map("plan_date") @db.VarChar(8)      // YYYYMMDD
+  planTime      String?  @map("plan_time") @db.VarChar(6)      // HHmmss
+  planStatus    String   @default("R") @map("plan_status") @db.VarChar(1) // R:대기, A:활성, C:완료
+  totalChute    Int      @default(0) @map("total_chute")
+  description   String?  @map("description") @db.VarChar(200)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  details       TbOperSortingPlanDt[]
+  history       TbOperSortingPlanHt[]
+  configs       TbOperSortingPlanConfigDt[]
+  specialKeys   TbOperSpecialKeyMt[]
+
+  @@index([machineId, planDate])
+  @@map("tb_oper_sorting_plan_mt")
+  @@schema("psm_operation")
+}
+
+/// 구분계획 설정값 상세
+model TbOperSortingPlanDt {
+  id            String   @id @default(uuid())
+  planId        String   @map("plan_id") @db.VarChar(20)
+  plan          TbOperSortingPlanMt @relation(fields: [planId], references: [planId])
+  chuteNo       Int      @map("chute_no")
+  sortCode      String   @map("sort_code") @db.VarChar(10)     // 구분코드
+  destName      String?  @map("dest_name") @db.VarChar(50)     // 행선지명
+  destCode      String?  @map("dest_code") @db.VarChar(10)     // 행선지코드
+  sortOrder     Int      @default(0) @map("sort_order")
+  useYn         String   @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([planId, chuteNo])
+  @@map("tb_oper_sorting_plan_dt")
+  @@schema("psm_operation")
+}
+
+/// 구분계획 변동 이력
+model TbOperSortingPlanHt {
+  id            String   @id @default(uuid())
+  planId        String   @map("plan_id") @db.VarChar(20)
+  plan          TbOperSortingPlanMt @relation(fields: [planId], references: [planId])
+  changeType    String   @map("change_type") @db.VarChar(1)    // C:생성, U:수정, D:삭제
+  changeField   String?  @map("change_field") @db.VarChar(50)
+  beforeValue   String?  @map("before_value") @db.VarChar(200)
+  afterValue    String?  @map("after_value") @db.VarChar(200)
+  changedBy     String?  @map("changed_by") @db.VarChar(20)
+  changedAt     DateTime @default(now()) @map("changed_at")
+
+  @@index([planId, changedAt])
+  @@map("tb_oper_sorting_plan_ht")
+  @@schema("psm_operation")
+}
+
+/// 구분계획 운영 설정 상세
+model TbOperSortingPlanConfigDt {
+  id            String   @id @default(uuid())
+  planId        String   @map("plan_id") @db.VarChar(20)
+  plan          TbOperSortingPlanMt @relation(fields: [planId], references: [planId])
+  configKey     String   @map("config_key") @db.VarChar(50)
+  configValue   String   @map("config_value") @db.VarChar(200)
+  configDesc    String?  @map("config_desc") @db.VarChar(100)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([planId, configKey])
+  @@map("tb_oper_sorting_plan_config_dt")
+  @@schema("psm_operation")
+}
+
+/// 슈트현황판 행선지 내용
+model TbOperChuteManagementDt {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  chuteNo       Int      @map("chute_no")
+  chuteType     String   @map("chute_type") @db.VarChar(2)     // N:일반, R:리젝트, O:오버플로
+  destName      String?  @map("dest_name") @db.VarChar(50)
+  destCode      String?  @map("dest_code") @db.VarChar(10)
+  chuteStatus   String   @default("N") @map("chute_status") @db.VarChar(1) // N:정상, F:만재, E:오류
+  itemCount     Int      @default(0) @map("item_count")
+  lastUpdated   DateTime @default(now()) @map("last_updated")
+
+  @@unique([machineId, chuteNo])
+  @@index([machineId])
+  @@map("tb_oper_chute_management_dt")
+  @@schema("psm_operation")
+}
+
+/// 위탁 크기 정의 Master
+model TbOperEntrustSizeMt {
+  sizeId        String   @id @map("size_id") @db.VarChar(10)
+  sizeName      String   @map("size_name") @db.VarChar(30)
+  minLength     Int      @default(0) @map("min_length")   // mm
+  maxLength     Int      @default(0) @map("max_length")
+  minWidth      Int      @default(0) @map("min_width")
+  maxWidth      Int      @default(0) @map("max_width")
+  minHeight     Int      @default(0) @map("min_height")
+  maxHeight     Int      @default(0) @map("max_height")
+  minWeight     Int      @default(0) @map("min_weight")   // g
+  maxWeight     Int      @default(0) @map("max_weight")
+  sizeDesc      String?  @map("size_desc") @db.VarChar(100)
+  useYn         String   @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("tb_oper_entrust_size_mt")
+  @@schema("psm_operation")
+}
+
+/// 그룹코드 정의
+model TbGroupCodeMt {
+  groupCode     String   @id @map("group_code") @db.VarChar(10)
+  groupCodeName String   @map("group_code_name") @db.VarChar(50)
+  groupCodeDesc String?  @map("group_code_desc") @db.VarChar(100)
+  useYn         String   @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  sortCodes     TbSortCodeMt[]
+
+  @@map("tb_group_code_mt")
+  @@schema("psm_operation")
+}
+
+/// 구분코드 정의
+model TbSortCodeMt {
+  id            String   @id @default(uuid())
+  groupCode     String   @map("group_code") @db.VarChar(10)
+  group         TbGroupCodeMt @relation(fields: [groupCode], references: [groupCode])
+  sortCode      String   @map("sort_code") @db.VarChar(10)
+  sortCodeName  String   @map("sort_code_name") @db.VarChar(50)
+  sortCodeDesc  String?  @map("sort_code_desc") @db.VarChar(100)
+  parentCode    String?  @map("parent_code") @db.VarChar(10)
+  sortOrder     Int      @default(0) @map("sort_order")
+  useYn         String   @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([groupCode, sortCode])
+  @@index([groupCode])
+  @@map("tb_sort_code_mt")
+  @@schema("psm_operation")
+}
+
+/// 우체국코드 정의
+model TbOfficeCodeMt {
+  officeCode    String   @id @map("office_code") @db.VarChar(10)
+  officeName    String   @map("office_name") @db.VarChar(50)
+  officeType    String   @map("office_type") @db.VarChar(2)     // C:집중국, O:우체국
+  regionCode    String?  @map("region_code") @db.VarChar(6)
+  regionName    String?  @map("region_name") @db.VarChar(30)
+  zipCode       String?  @map("zip_code") @db.VarChar(5)
+  address       String?  @map("address") @db.VarChar(200)
+  useYn         String   @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("tb_office_code_mt")
+  @@schema("psm_operation")
+}
+
+/// 구분계획 특수키 Master
+model TbOperSpecialKeyMt {
+  specialKeyId  String   @id @map("special_key_id") @db.VarChar(20)
+  planId        String   @map("plan_id") @db.VarChar(20)
+  plan          TbOperSortingPlanMt @relation(fields: [planId], references: [planId])
+  keyName       String   @map("key_name") @db.VarChar(50)
+  keyType       String   @map("key_type") @db.VarChar(2)       // 특수키 유형
+  keyDesc       String?  @map("key_desc") @db.VarChar(100)
+  useYn         String   @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  details       TbOperSpecialKeyDt[]
+
+  @@index([planId])
+  @@map("tb_oper_special_key_mt")
+  @@schema("psm_operation")
+}
+
+/// 구분계획 특수키 상세
+model TbOperSpecialKeyDt {
+  id            String   @id @default(uuid())
+  specialKeyId  String   @map("special_key_id") @db.VarChar(20)
+  specialKey    TbOperSpecialKeyMt @relation(fields: [specialKeyId], references: [specialKeyId])
+  keyValue      String   @map("key_value") @db.VarChar(50)
+  chuteNo       Int      @map("chute_no")
+  destName      String?  @map("dest_name") @db.VarChar(50)
+  sortOrder     Int      @default(0) @map("sort_order")
+  useYn         String   @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([specialKeyId])
+  @@map("tb_oper_special_key_dt")
+  @@schema("psm_operation")
+}
+
+// ============================================================================
+// [psm_operation 스키마] 3) CGS 테이블
+// ============================================================================
+
+/// HMI(CGS) Alarm 정의 Master
+model TbHmiAlarmMt {
+  alarmCode     String   @id @map("alarm_code") @db.VarChar(10)
+  alarmName     String   @map("alarm_name") @db.VarChar(100)
+  alarmLevel    String   @map("alarm_level") @db.VarChar(1)    // C:Critical, E:Error, W:Warning, I:Info
+  alarmGroup    String?  @map("alarm_group") @db.VarChar(20)
+  alarmDesc     String?  @map("alarm_desc") @db.VarChar(200)
+  autoResetYn   String   @default("N") @map("auto_reset_yn") @db.VarChar(1)
+  useYn         String   @default("Y") @map("use_yn") @db.VarChar(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  alarmHistory  TbHmiAlarmHt[]
+
+  @@map("tb_hmi_alarm_mt")
+  @@schema("psm_operation")
+}
+
+/// HMI(CGS) Alarm 이력
+model TbHmiAlarmHt {
+  id            String   @id @default(uuid())
+  alarmCode     String   @map("alarm_code") @db.VarChar(10)
+  alarm         TbHmiAlarmMt @relation(fields: [alarmCode], references: [alarmCode])
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  moduleId      String?  @map("module_id") @db.VarChar(10)
+  occurredAt    DateTime @map("occurred_at")
+  clearedAt     DateTime? @map("cleared_at")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  acknowledgedBy String?  @map("acknowledged_by") @db.VarChar(20)
+  alarmMessage  String?  @map("alarm_message") @db.VarChar(200)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([alarmCode, occurredAt])
+  @@index([machineId, occurredAt])
+  @@map("tb_hmi_alarm_ht")
+  @@schema("psm_operation")
+}
+
+// ============================================================================
+// [psm_operation 스키마] 4) 소포 테이블
+// ============================================================================
+
+/// 소포정보 상세
+model TbItemParcelDt {
+  id            String   @id @default(uuid())
+  barcode       String   @map("barcode") @db.VarChar(30)
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  planId        String?  @map("plan_id") @db.VarChar(20)
+  inductionNo   Int?     @map("induction_no")
+  chuteNo       Int?     @map("chute_no")
+  sortCode      String?  @map("sort_code") @db.VarChar(10)
+  destCode      String?  @map("dest_code") @db.VarChar(10)
+  destName      String?  @map("dest_name") @db.VarChar(50)
+  resultCode    String?  @map("result_code") @db.VarChar(2)    // OK:정상, NR:미인식, NM:미매칭, RJ:리젝트
+  weight        Int?     @map("weight")                         // g
+  length        Int?     @map("length")                         // mm
+  width         Int?     @map("width")
+  height        Int?     @map("height")
+  imageYn       String   @default("N") @map("image_yn") @db.VarChar(1)
+  imagePath     String?  @map("image_path") @db.VarChar(200)
+  processedAt   DateTime @map("processed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([barcode])
+  @@index([machineId, processedAt])
+  @@index([planId])
+  @@map("tb_item_parcel_dt")
+  @@schema("psm_operation")
+}
+
+// ============================================================================
+// [psm_operation 스키마] 5) 통계 테이블
+// ============================================================================
+
+/// 요약 통계정보
+model TbStatSummaryStatistics {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  planId        String?  @map("plan_id") @db.VarChar(20)
+  statDate      String   @map("stat_date") @db.VarChar(8)      // YYYYMMDD
+  statTime      String   @map("stat_time") @db.VarChar(6)      // HHmmss
+  totalCount    Int      @default(0) @map("total_count")
+  normalCount   Int      @default(0) @map("normal_count")
+  rejectCount   Int      @default(0) @map("reject_count")
+  noReadCount   Int      @default(0) @map("no_read_count")
+  noMatchCount  Int      @default(0) @map("no_match_count")
+  overCount     Int      @default(0) @map("over_count")         // 오버플로
+  throughput    Float    @default(0) @map("throughput")          // 시간당 처리량
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, statDate, statTime])
+  @@map("tb_stat_summary_statistics")
+  @@schema("psm_operation")
+}
+
+/// Induction별 통계
+model TbStatInductionStatistics {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  planId        String?  @map("plan_id") @db.VarChar(20)
+  inductionNo   Int      @map("induction_no")
+  statDate      String   @map("stat_date") @db.VarChar(8)
+  statTime      String   @map("stat_time") @db.VarChar(6)
+  totalCount    Int      @default(0) @map("total_count")
+  normalCount   Int      @default(0) @map("normal_count")
+  rejectCount   Int      @default(0) @map("reject_count")
+  noReadCount   Int      @default(0) @map("no_read_count")
+  noMatchCount  Int      @default(0) @map("no_match_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, inductionNo, statDate])
+  @@map("tb_stat_induction_statistics")
+  @@schema("psm_operation")
+}
+
+/// Chute별 통계
+model TbStatChuteStatistics {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  planId        String?  @map("plan_id") @db.VarChar(20)
+  chuteNo       Int      @map("chute_no")
+  statDate      String   @map("stat_date") @db.VarChar(8)
+  statTime      String   @map("stat_time") @db.VarChar(6)
+  totalCount    Int      @default(0) @map("total_count")
+  destCode      String?  @map("dest_code") @db.VarChar(10)
+  destName      String?  @map("dest_name") @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, chuteNo, statDate])
+  @@map("tb_stat_chute_statistics")
+  @@schema("psm_operation")
+}
+
+/// 우편번호 코드별 통계
+model TbStatCodeStatistics {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  planId        String?  @map("plan_id") @db.VarChar(20)
+  sortCode      String   @map("sort_code") @db.VarChar(10)
+  statDate      String   @map("stat_date") @db.VarChar(8)
+  statTime      String   @map("stat_time") @db.VarChar(6)
+  totalCount    Int      @default(0) @map("total_count")
+  chuteNo       Int?     @map("chute_no")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, sortCode, statDate])
+  @@map("tb_stat_code_statistics")
+  @@schema("psm_operation")
+}
+
+/// 구분기 통계
+model TbStatSorterStatistics {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  planId        String?  @map("plan_id") @db.VarChar(20)
+  statDate      String   @map("stat_date") @db.VarChar(8)
+  statTime      String   @map("stat_time") @db.VarChar(6)
+  runningTime   Int      @default(0) @map("running_time")      // 운영시간(초)
+  stoppedTime   Int      @default(0) @map("stopped_time")      // 정지시간(초)
+  errorTime     Int      @default(0) @map("error_time")        // 에러시간(초)
+  totalCount    Int      @default(0) @map("total_count")
+  normalCount   Int      @default(0) @map("normal_count")
+  rejectCount   Int      @default(0) @map("reject_count")
+  availability  Float    @default(0) @map("availability")      // 가동률(%)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, statDate, statTime])
+  @@map("tb_stat_sorter_statistics")
+  @@schema("psm_operation")
+}
+
+// ============================================================================
+// [psm_operation 스키마] 6) 접수정보 테이블
+// ============================================================================
+
+/// 접수정보 연계
+model TbSimRegiInfo {
+  id            String   @id @default(uuid())
+  regiNo        String   @map("regi_no") @db.VarChar(20)       // 접수번호
+  barcode       String   @map("barcode") @db.VarChar(30)
+  senderName    String?  @map("sender_name") @db.VarChar(50)
+  senderZip     String?  @map("sender_zip") @db.VarChar(5)
+  senderAddr    String?  @map("sender_addr") @db.VarChar(200)
+  receiverName  String?  @map("receiver_name") @db.VarChar(50)
+  receiverZip   String?  @map("receiver_zip") @db.VarChar(5)
+  receiverAddr  String?  @map("receiver_addr") @db.VarChar(200)
+  itemType      String?  @map("item_type") @db.VarChar(2)      // 우편물 유형
+  weight        Int?     @map("weight")                         // g
+  regDate       String?  @map("reg_date") @db.VarChar(8)       // YYYYMMDD
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([barcode])
+  @@index([regiNo])
+  @@map("tb_sim_regi_info")
+  @@schema("psm_operation")
+}
+
+// ============================================================================
+// [psm_reginfo 스키마] SIMS 연계 통계 DB
+// ============================================================================
+
+/// 송신용 전체 통계
+model PsmStatistics {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  statDate      String   @map("stat_date") @db.VarChar(8)
+  statTime      String   @map("stat_time") @db.VarChar(6)
+  totalCount    Int      @default(0) @map("total_count")
+  normalCount   Int      @default(0) @map("normal_count")
+  rejectCount   Int      @default(0) @map("reject_count")
+  noReadCount   Int      @default(0) @map("no_read_count")
+  noMatchCount  Int      @default(0) @map("no_match_count")
+  sendYn        String   @default("N") @map("send_yn") @db.VarChar(1)
+  sendAt        DateTime? @map("send_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, statDate])
+  @@index([sendYn])
+  @@map("psm_statistics")
+  @@schema("psm_reginfo")
+}
+
+/// 송신용 공급부 통계
+model PsmInductionStatistics {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  inductionNo   Int      @map("induction_no")
+  statDate      String   @map("stat_date") @db.VarChar(8)
+  statTime      String   @map("stat_time") @db.VarChar(6)
+  totalCount    Int      @default(0) @map("total_count")
+  normalCount   Int      @default(0) @map("normal_count")
+  rejectCount   Int      @default(0) @map("reject_count")
+  sendYn        String   @default("N") @map("send_yn") @db.VarChar(1)
+  sendAt        DateTime? @map("send_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, statDate])
+  @@map("psm_induction_statistics")
+  @@schema("psm_reginfo")
+}
+
+/// 송신용 구분구 통계
+model PsmChuteStatistics {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  chuteNo       Int      @map("chute_no")
+  statDate      String   @map("stat_date") @db.VarChar(8)
+  statTime      String   @map("stat_time") @db.VarChar(6)
+  totalCount    Int      @default(0) @map("total_count")
+  destCode      String?  @map("dest_code") @db.VarChar(10)
+  destName      String?  @map("dest_name") @db.VarChar(50)
+  sendYn        String   @default("N") @map("send_yn") @db.VarChar(1)
+  sendAt        DateTime? @map("send_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, statDate])
+  @@map("psm_chute_statistics")
+  @@schema("psm_reginfo")
+}
+
+/// 송신용 우편번호 통계
+model PsmPostAmount {
+  id            String   @id @default(uuid())
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  sortCode      String   @map("sort_code") @db.VarChar(10)
+  statDate      String   @map("stat_date") @db.VarChar(8)
+  statTime      String   @map("stat_time") @db.VarChar(6)
+  totalCount    Int      @default(0) @map("total_count")
+  sendYn        String   @default("N") @map("send_yn") @db.VarChar(1)
+  sendAt        DateTime? @map("send_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, statDate])
+  @@map("psm_post_amount")
+  @@schema("psm_reginfo")
+}
+
+/// 송신용 완료 확인
+model PsmRequest {
+  id            String   @id @default(uuid())
+  requestType   String   @map("request_type") @db.VarChar(10)  // 요청유형
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  requestDate   String   @map("request_date") @db.VarChar(8)
+  requestTime   String   @map("request_time") @db.VarChar(6)
+  requestStatus String   @default("R") @map("request_status") @db.VarChar(1) // R:요청, C:완료, F:실패
+  responseDate  String?  @map("response_date") @db.VarChar(8)
+  responseTime  String?  @map("response_time") @db.VarChar(6)
+  resultMessage String?  @map("result_message") @db.VarChar(200)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, requestDate])
+  @@index([requestStatus])
+  @@map("psm_request")
+  @@schema("psm_reginfo")
+}
+
+/// 구분정보 연계
+model PsmRegPostResult {
+  id            String   @id @default(uuid())
+  barcode       String   @map("barcode") @db.VarChar(30)
+  machineId     String   @map("machine_id") @db.VarChar(6)
+  sortCode      String?  @map("sort_code") @db.VarChar(10)
+  destCode      String?  @map("dest_code") @db.VarChar(10)
+  chuteNo       Int?     @map("chute_no")
+  resultCode    String?  @map("result_code") @db.VarChar(2)
+  processedAt   DateTime @map("processed_at")
+  sendYn        String   @default("N") @map("send_yn") @db.VarChar(1)
+  sendAt        DateTime? @map("send_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([barcode])
+  @@index([machineId, processedAt])
+  @@index([sendYn])
+  @@map("psm_reg_post_result")
+  @@schema("psm_reginfo")
+}
+
+/// 설비상태정보
+model PoemT0050 {
+  id              String   @id @default(uuid())
+  machineId       String   @map("machine_id") @db.VarChar(6)
+  equipmentStatus String   @map("equipment_status") @db.VarChar(2) // 설비상태코드
+  statusName      String?  @map("status_name") @db.VarChar(50)
+  occurredAt      DateTime @map("occurred_at")
+  reportedAt      DateTime? @map("reported_at")
+  sendYn          String   @default("N") @map("send_yn") @db.VarChar(1)
+  sendAt          DateTime? @map("send_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([machineId, occurredAt])
+  @@index([sendYn])
+  @@map("poem_t0050")
+  @@schema("psm_reginfo")
+}
