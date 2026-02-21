@@ -6,7 +6,7 @@ import * as path from 'path';
 
 type FallbackStatusType = 'INACTIVE' | 'ACTIVATED' | 'RECOVERING' | 'COMPLETED';
 
-interface FallbackEvent {
+export interface FallbackEvent {
   eventId: string;
   eventType: string;
   timestamp: string;
@@ -15,7 +15,7 @@ interface FallbackEvent {
   recordCount?: number;
 }
 
-interface PendingRecord {
+export interface PendingRecord {
   id: string;
   type: 'SORTING_RESULT' | 'BINDING_INFO';
   data: Record<string, unknown>;
